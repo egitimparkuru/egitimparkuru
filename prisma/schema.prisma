@@ -1,0 +1,715 @@
+// EduTrack-Pro Database Schema
+// Eğitim Yönetim Sistemi
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User Types
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// Academic Enums
+enum GradeLevel {
+  PRE_K
+  KINDERGARTEN
+  FIRST_GRADE
+  SECOND_GRADE
+  THIRD_GRADE
+  FOURTH_GRADE
+  FIFTH_GRADE
+  SIXTH_GRADE
+  SEVENTH_GRADE
+  EIGHTH_GRADE
+  NINTH_GRADE
+  TENTH_GRADE
+  ELEVENTH_GRADE
+  TWELFTH_GRADE
+}
+
+enum SubjectType {
+  MATHEMATICS
+  SCIENCE
+  LANGUAGE_ARTS
+  SOCIAL_STUDIES
+  PHYSICAL_EDUCATION
+  ART
+  MUSIC
+  FOREIGN_LANGUAGE
+  COMPUTER_SCIENCE
+  OTHER
+}
+
+enum AssignmentType {
+  HOMEWORK
+  QUIZ
+  EXAM
+  PROJECT
+  PRESENTATION
+  ESSAY
+  LABORATORY
+  OTHER
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum SubmissionStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  LATE
+  GRADED
+}
+
+// Core User Model
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  firstName String
+  lastName  String
+  phone     String?
+  avatar    String?
+  role      UserRole
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  teacherProfile Teacher?
+  studentProfile Student?
+  parentProfile  Parent?
+  adminProfile   Admin?
+
+  // Authentication
+  sessions Session[]
+
+  @@map("users")
+}
+
+// Admin Profile
+model Admin {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Admin specific fields
+  permissions String // JSON string of permissions
+  department  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admins")
+}
+
+// Teacher Profile
+model Teacher {
+  id           String     @id @default(cuid())
+  userId       String     @unique
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Teacher specific fields
+  employeeId   String     @unique
+  department   String?
+  specialization String // JSON string of specializations
+  hireDate     DateTime
+  salary       Decimal?
+  
+  // Relations
+  students     Student[]
+  parents      Parent[]
+  grades       Grade[]
+  tasks        Task[]
+  questions    Question[]
+  extensions   ExtensionRequest[]
+  routineTasks RoutineTask[]
+  tests        Test[]
+  
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("teachers")
+}
+
+// Student Profile
+model Student {
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teacherId   String
+  teacher     Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  // Student specific fields
+  registrationDate DateTime?
+  grade            String?
+  city             String?
+  notes            String?
+  
+  // Relations
+  parent      Parent?
+  grades      Grade[]
+  tasks       Task[]
+  questions   Question[]
+  extensions  ExtensionRequest[]
+  studentSubjects StudentSubject[]
+  studentProgress StudentProgress[]
+  testResults TestResult[]
+  routineTasks RoutineTask[] @relation("RoutineTaskStudents")
+  testAttempts TestAttempt[]
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("students")
+}
+
+// Parent Profile
+model Parent {
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teacherId   String
+  teacher     Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  // Parent specific fields
+  studentId   String?  @unique
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  occupation  String?
+  notes       String?
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("parents")
+}
+
+
+// Class/Section Model (Legacy - will be replaced by new Class model)
+// model Class {
+//   id          String     @id @default(cuid())
+//   name        String
+//   code        String     @unique
+//   description String?
+//   gradeLevel  GradeLevel
+//   subject     SubjectType
+//   teacherId   String
+//   teacher     Teacher    @relation(fields: [teacherId], references: [id])
+//   
+//   // Class schedule
+//   startDate   DateTime
+//   endDate     DateTime?
+//   maxStudents Int        @default(30)
+//   
+//   // Relations
+//   enrollments Enrollment[]
+//   assignments Assignment[]
+//   
+//   createdAt   DateTime   @default(now())
+//   updatedAt   DateTime   @updatedAt
+//
+//   @@map("classes")
+// }
+
+// Student Enrollment (Legacy - will be replaced by StudentSubject)
+// model Enrollment {
+//   id        String   @id @default(cuid())
+//   studentId String
+//   classId   String
+//   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+//   class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+//   
+//   enrolledAt DateTime @default(now())
+//   status     String   @default("active") // "active", "dropped", "completed"
+//   
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+//
+//   @@unique([studentId, classId])
+//   @@map("enrollments")
+// }
+
+// Assignment Model (Legacy - will be replaced by Task model)
+// model Assignment {
+//   id          String           @id @default(cuid())
+//   title       String
+//   description String?
+//   type        AssignmentType
+//   status      AssignmentStatus @default(DRAFT)
+//   
+//   // Assignment details
+//   dueDate     DateTime
+//   maxPoints   Decimal
+//   instructions String?
+//   attachments String // JSON string of file URLs
+//   
+//   // Relations
+//   classId     String
+//   teacherId   String
+//   class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+//   teacher     Teacher   @relation(fields: [teacherId], references: [id])
+//   
+//   submissions AssignmentSubmission[]
+//   
+//   createdAt   DateTime         @default(now())
+//   updatedAt   DateTime         @updatedAt
+//
+//   @@map("assignments")
+// }
+
+// Assignment Submission (Legacy - will be replaced by Task submissions)
+// model AssignmentSubmission {
+//   id           String           @id @default(cuid())
+//   assignmentId String
+//   studentId    String
+//   assignment   Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+//   student      Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+//   
+//   // Submission details
+//   content      String?
+//   attachments  String // JSON string of file URLs
+//   status       SubmissionStatus @default(NOT_SUBMITTED)
+//   submittedAt  DateTime?
+//   
+//   // Grading
+//   pointsEarned Decimal?
+//   feedback     String?
+//   gradedAt     DateTime?
+//   
+//   createdAt    DateTime         @default(now())
+//   updatedAt    DateTime         @updatedAt
+//
+//   @@unique([assignmentId, studentId])
+//   @@map("assignment_submissions")
+// }
+
+// Grade Model
+model Grade {
+  id           String   @id @default(cuid())
+  studentId    String
+  teacherId    String
+  assignmentId String?
+  classId      String?
+  
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher      Teacher  @relation(fields: [teacherId], references: [id])
+  
+  // Grade details
+  pointsEarned Decimal
+  maxPoints    Decimal
+  percentage   Decimal
+  letterGrade  String? // "A", "B", "C", "D", "F"
+  comments     String?
+  
+  // Grade type
+  type         String   @default("assignment") // "assignment", "quiz", "exam", "participation"
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("grades")
+}
+
+// Session Management
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("sessions")
+}
+
+
+// Question Model (Öğrenci Soruları)
+model Question {
+  id          String     @id @default(cuid())
+  title       String
+  content     String     // Soru içeriği
+  
+  // Relations
+  studentId   String
+  teacherId   String
+  student     Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher     Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  // Status
+  status      String     @default("pending") // "pending", "answered", "closed"
+  
+  // Answer
+  answer      String?
+  answeredAt  DateTime?
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("questions")
+}
+
+// Extension Request Model (Ek Süre Talepleri)
+model ExtensionRequest {
+  id          String     @id @default(cuid())
+  reason      String     // Talep nedeni
+  
+  // Relations
+  taskId      String
+  studentId   String
+  teacherId   String
+  task        Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  student     Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher     Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  // Status
+  status      String     @default("pending") // "pending", "approved", "rejected"
+  
+  // Extension details
+  requestedDays Int?     // Talep edilen gün sayısı
+  approvedDays  Int?     // Onaylanan gün sayısı
+  newDueDate    DateTime? // Yeni teslim tarihi
+  
+  // Response
+  response    String?    // Öğretmen yanıtı
+  respondedAt DateTime?
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("extension_requests")
+}
+
+// System Settings
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  type  String @default("string") // "string", "number", "boolean", "json"
+  
+  description String?
+  category    String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// Lesson Management Models
+model Class {
+  id        String   @id @default(cuid())
+  name      String   @unique // "5", "6", "7", "8", "9", "10", "11", "12"
+  level     Int      @unique // 5, 6, 7, 8, 9, 10, 11, 12
+  
+  // Relations
+  subjects  Subject[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("classes")
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  name      String   // "Matematik", "Türkçe", "Fen Bilimleri", etc.
+  
+  // Relations
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  topics    Topic[]
+  studentSubjects StudentSubject[]
+  tasks     Task[]
+  routineTasks RoutineTask[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, classId])
+  @@map("subjects")
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  name      String   // "Doğal Sayılar", "Kesirler", etc.
+  
+  // Relations
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentProgress StudentProgress[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, subjectId])
+  @@map("topics")
+}
+
+model StudentSubject {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  studentId String
+  subjectId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  
+  // Assignment details
+  assignedAt DateTime @default(now())
+  status     String   @default("assigned") // "assigned", "completed", "cancelled"
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, subjectId])
+  @@map("student_subjects")
+}
+
+model StudentProgress {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  studentId String
+  topicId   String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  
+  // Progress details
+  status      String   @default("pending") // "pending", "completed"
+  completedAt DateTime?
+  notes       String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, topicId])
+  @@map("student_progress")
+}
+
+model Task {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  studentId String
+  teacherId String
+  subjectId String?
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  
+  // Task details
+  description  String
+  startDate    DateTime
+  startTime    String?
+  endDate      DateTime
+  endTime      String?
+  type         String   // "konu_anlatimi", "konu_anlatimi_video", "soru_cozumu", "deneme", "diger"
+  resourceName String
+  pageStart    Int?
+  pageEnd      Int?
+  videoCount   Int?
+  testCount    Int?
+  status       String   @default("pending") // "pending", "completed", "overdue"
+  extensions   ExtensionRequest[]
+  testResults  TestResult[]
+  
+  // Task completion details
+  completedAt    DateTime? // When student marked as completed
+  completionNote String?   // Student's completion note
+  
+  // Test solution details (for soru_cozumu type)
+  correctAnswers Int?      // Number of correct answers
+  wrongAnswers   Int?      // Number of wrong answers
+  blankAnswers   Int?      // Number of blank answers
+  totalScore     Decimal?  // Calculated score (4 wrong = 1 correct)
+  testResult     String?   // JSON string for detailed test results
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tasks")
+}
+
+model RoutineTask {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  teacherId String
+  subjectId String?
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  students  Student[] @relation("RoutineTaskStudents")
+  
+  // Task details
+  name        String
+  description String?
+  type        String   // "konu_anlatimi", "konu_anlatimi_video", "soru_cozumu", "deneme", "diger"
+  frequency   String   // "daily", "weekly", "monthly"
+  dayOfWeek   Int?     // 0-6 for weekly
+  dayOfMonth  Int?     // 1-31 for monthly
+  time        String   // HH:MM format
+  isActive    Boolean  @default(true)
+  
+  // Execution tracking
+  lastExecuted DateTime?
+  nextExecution DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("routine_tasks")
+}
+
+// Test Center Models
+model Test {
+  id          String   @id @default(cuid())
+  
+  // Relations
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  // Test details
+  title       String
+  description String?
+  subject     String   // "Matematik", "Fizik", etc.
+  grade       String   // "9. Sınıf", "10. Sınıf", etc.
+  duration    Int      // dakika
+  questionCount Int    @default(0)
+  status      String   @default("draft") // "draft", "published", "completed"
+  
+  // Test settings
+  isRandomOrder Boolean @default(false)
+  showCorrectAnswers Boolean @default(true)
+  allowRetake Boolean @default(false)
+  maxAttempts Int? // null = unlimited
+  
+  // Relations
+  questions   TestQuestion[]
+  attempts   TestAttempt[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tests")
+}
+
+model TestQuestion {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  testId    String
+  test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  
+  // Question details
+  question  String
+  type      String   @default("multiple_choice") // "multiple_choice", "true_false", "fill_blank", "essay"
+  points    Int      @default(1)
+  order     Int      // Question order in test
+  
+  // Question options (for multiple choice)
+  options   String?  // JSON string of options
+  correctAnswer String? // For multiple choice, true/false, fill blank
+  
+  // Additional fields
+  explanation String? // Explanation for correct answer
+  imageUrl   String? // Image for question
+  
+  // Relations
+  answers    TestAnswer[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("test_questions")
+}
+
+model TestAttempt {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  testId    String
+  studentId String
+  test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  // Attempt details
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  score     Int?     // Points earned
+  maxScore  Int?     // Maximum possible points
+  percentage Decimal? // Percentage score
+  
+  // Status
+  status    String   @default("in_progress") // "in_progress", "completed", "abandoned"
+  
+  // Relations
+  answers   TestAnswer[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("test_attempts")
+}
+
+model TestAnswer {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  attemptId String
+  questionId String
+  attempt   TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question  TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  // Answer details
+  answer    String?  // Student's answer
+  isCorrect Boolean @default(false)
+  points    Int      @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@map("test_answers")
+}
+
+// Test Result Model - Student test completion tracking
+model TestResult {
+  id             String   @id @default(cuid())
+  studentId      String
+  taskId         String
+  score          Int?     // Points scored
+  totalQuestions Int?     // Total questions in test
+  correctAnswers Int?     // Number of correct answers
+  wrongAnswers   Int?     // Number of wrong answers
+  duration       Int?     // Duration in minutes
+  status         String   @default("completed") // "completed", "in_progress", "failed"
+  notes          String?  // Additional notes
+  completedAt    DateTime @default(now())
+  
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  task    Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("test_results")
+}
